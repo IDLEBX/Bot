@@ -202,7 +202,7 @@ app.get('/', (req, res) => {
             </div>
             <div class="footer">
                 <p>© 2026 IDLEB X - جميع الحقوق محفوظة</p>
-                <p>👨‍💻 المطور: @a_73a3 | 📢 @IDLEBX</p>
+                <p>👨‍💻 المطور: @IDLEBX | 📢 @IDLEBX2</p>
             </div>
         </body>
         </html>
@@ -447,7 +447,7 @@ async function handleMessage(message) {
     else if (text === '🎁 شحن الرصيد' || text === '/recharge') {
         await sendMessage(chatId,
             `🎁 *طرق الشحن*\n\n` +
-            `• تواصل مع المدير: @a_73a3\n` +
+            `• تواصل مع المدير: @IDLEBX\n` +
             `• رابط إحالتك:\n<code>https://t.me/${BOT_TOKEN.split(':')[0]}?start=ref_${userId}</code>`
         );
     }
@@ -455,7 +455,7 @@ async function handleMessage(message) {
         await sendMessage(chatId, `📢 *قنواتنا*\n\n@IDLEBX\n@IDLEBX2`);
     }
     else if (text === '🆘 مساعدة') {
-        await sendMessage(chatId, `🆘 *المساعدة*\n\nللتواصل: @a_73a3`);
+        await sendMessage(chatId, `🆘 *المساعدة*\n\nللتواصل: @IDLEBX`);
     }
     else if (text === '🔙 رجوع') {
         await sendMessage(chatId, `🏠 *القائمة الرئيسية*`, getMainKeyboard());
@@ -567,7 +567,7 @@ async function handlePurchase(chatId, userId, productId) {
                 `📎 *تم إرسال الملف أعلاه*`
             );
         } else {
-            await sendMessage(chatId, `⚠️ حدث خطأ في إرسال الملف، تواصل مع المدير: @a_73a3`);
+            await sendMessage(chatId, `⚠️ حدث خطأ في إرسال الملف، تواصل مع المدير: @IDLEBX`);
         }
     } else {
         await sendMessage(chatId,
@@ -647,7 +647,7 @@ async function handleRashq(chatId, userId, link, user) {
     } catch (error) {
         user.points += service.points;
         users.set(userId, user);
-        await sendMessage(chatId, `❌ حدث خطأ، تم استرداد نقاطك.\n📞 تواصل مع المدير: @a_73a3`);
+        await sendMessage(chatId, `❌ حدث خطأ، تم استرداد نقاطك.\n📞 تواصل مع المدير: @IDLEBX`);
     }
 }
 
