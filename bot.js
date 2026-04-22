@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const FormData = require('form-data');
 
 const app = express();
 app.use(express.json());
@@ -14,10 +15,8 @@ if (!fs.existsSync(filesDir)) {
     fs.mkdirSync(filesDir, { recursive: true });
 }
 
-// خدمة الملفات الثابتة
 app.use('/files', express.static(filesDir));
 
-// إعداد تخزين الملفات
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, filesDir);
@@ -32,23 +31,24 @@ const upload = multer({ storage: storage });
 
 // ========== إعدادات البوت ==========
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_IDS = ['7240148750']; // ضع معرفك هنا
-const DEVELOPER = '@IDLEBX';
+const ADMIN_IDS = ['6479602603']; // ضع معرفك هنا (ارسل /id لـ @userinfobot)
+const DEVELOPER = '@a_73a3';
 const BASE_URL = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 // ========== قاعدة البيانات ==========
 const users = new Map();
 const products = new Map();
+const pendingBroadcast = new Map();
 let nextProductId = 1;
 
 // ========== الخدمات ==========
 const services = [
-    { id: 1, name: "📸 رشق مشاهدات انستقرام", desc: "زيادة مشاهدات المنشورات", points: 10, quantity: 200, endpoint: "https://leofame.com/ar/free-instagram-views" },
+    { id: 1, name: "📸 رشق مشاهدات انستقرام", desc: "زيادة مشاهدات المنشورات +200", points: 10, quantity: 200, endpoint: "https://leofame.com/ar/free-instagram-views" },
     { id: 2, name: "❤️ رشق لايكات انستقرام", desc: "زيادة إعجابات المنشورات", points: 8, quantity: null, endpoint: "https://leofame.com/ar/free-instagram-likes" },
-    { id: 3, name: "🔖 رشق حفظ انستقرام", desc: "زيادة حفظ المنشورات", points: 12, quantity: 30, endpoint: "https://leofame.com/ar/free-instagram-saves" },
+    { id: 3, name: "🔖 رشق حفظ انستقرام", desc: "زيادة حفظ المنشورات +30", points: 12, quantity: 30, endpoint: "https://leofame.com/ar/free-instagram-saves" },
     { id: 4, name: "👀 رشق مشاهدات ستوري", desc: "زيادة مشاهدات القصص", points: 8, quantity: null, endpoint: "https://leofame.com/ar/free-instagram-story-views", type: "user" },
-    { id: 5, name: "🎵 رشق لايكات تيك توك", desc: "زيادة إعجابات التيك توك", points: 10, quantity: 100, endpoint: "https://leofame.com/ar/free-tiktok-likes" },
+    { id: 5, name: "🎵 رشق لايكات تيك توك", desc: "زيادة إعجابات التيك توك +100", points: 10, quantity: 100, endpoint: "https://leofame.com/ar/free-tiktok-likes" },
     { id: 6, name: "📱 رشق مشاهدات تيك توك", desc: "زيادة مشاهدات التيك توك", points: 8, quantity: null, endpoint: "https://leofame.com/ar/free-tiktok-views" }
 ];
 
@@ -57,103 +57,247 @@ app.get('/', (req, res) => {
     res.send(`
         <html>
         <head>
-            <title>IDLEB X Store Bot</title>
+            <title>IDLEB X ULTIMATE BOT</title>
             <meta charset="UTF-8">
             <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
                     background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
                     color: white;
-                    font-family: Arial, sans-serif;
-                    text-align: center;
-                    padding: 50px;
+                    font-family: 'Arial', sans-serif;
+                    min-height: 100vh;
                 }
-                .container { max-width: 600px; margin: 0 auto; }
-                .logo { font-size: 80px; animation: pulse 2s infinite; }
-                @keyframes pulse {
-                    0%, 100% { transform: scale(1); }
-                    50% { transform: scale(1.1); }
-                }
-                .button {
-                    background: linear-gradient(135deg, #ff4444, #cc0000);
-                    padding: 15px 30px;
-                    border-radius: 30px;
-                    text-decoration: none;
-                    color: white;
-                    display: inline-block;
-                    margin: 10px;
-                }
+                .header { background: rgba(0,0,0,0.8); padding: 20px; text-align: center; border-bottom: 2px solid #ff4444; }
+                .logo { font-size: 60px; animation: pulse 2s infinite; display: inline-block; }
+                @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+                .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+                .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
+                .stat-card { background: rgba(255,255,255,0.1); border-radius: 20px; padding: 20px; text-align: center; backdrop-filter: blur(10px); }
+                .stat-number { font-size: 36px; font-weight: bold; color: #ff4444; }
+                .stat-label { font-size: 14px; color: #aaa; margin-top: 10px; }
+                .admin-panel { background: rgba(255,255,255,0.05); border-radius: 20px; padding: 30px; margin-top: 20px; }
+                .admin-buttons { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 20px; }
+                .btn { background: linear-gradient(135deg, #ff4444, #cc0000); padding: 12px 25px; border-radius: 30px; text-decoration: none; color: white; display: inline-block; transition: 0.3s; }
+                .btn:hover { transform: translateY(-3px); box-shadow: 0 5px 20px rgba(255,0,0,0.4); }
+                .btn-green { background: linear-gradient(135deg, #00cc44, #009933); }
+                .btn-blue { background: linear-gradient(135deg, #0088cc, #006699); }
+                .footer { text-align: center; padding: 30px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 40px; }
             </style>
         </head>
         <body>
-            <div class="container">
+            <div class="header">
                 <div class="logo">🤖</div>
-                <h1>IDLEB X Store Bot</h1>
-                <p>✅ البوت شغال بكفاءة عالية</p>
-                <p>📊 متجر + رشق تفاعل + نظام نقاط</p>
-                <p>📁 رفع ملفات حقيقية</p>
-                <a href="/admin/upload" class="button">📤 رفع منتج جديد</a>
-                <p style="margin-top: 50px;">👨‍💻 المطور: @IDLEBX</p>
+                <h1>IDLEB X ULTIMATE BOT</h1>
+                <p>أقوى بوت متجر </p>
             </div>
+            <div class="container">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-number" id="users">0</div><div class="stat-label">👥 المستخدمين</div></div>
+                    <div class="stat-card"><div class="stat-number" id="products">0</div><div class="stat-label">📦 المنتجات</div></div>
+                    <div class="stat-card"><div class="stat-number" id="points">0</div><div class="stat-label">💰 إجمالي النقاط</div></div>
+                    <div class="stat-card"><div class="stat-number" id="orders">0</div><div class="stat-label">📊 الطلبات</div></div>
+                </div>
+                <div class="admin-panel">
+                    <h2 style="text-align:center;">🔐 لوحة تحكم المدير</h2>
+                    <div class="admin-buttons">
+                        <a href="/admin/upload" class="btn">📤 رفع منتج جديد</a>
+                        <a href="/admin/products" class="btn btn-blue">📋 قائمة المنتجات</a>
+                        <a href="/admin/users" class="btn btn-green">👥 قائمة المستخدمين</a>
+                        <a href="/admin/broadcast" class="btn">📢 إرسال إشعار</a>
+                        <a href="/admin/stats" class="btn btn-green">📊 إحصائيات</a>
+                        <a href="/admin/add-points" class="btn btn-blue">💰 شحن نقاط</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <p>© 2026 IDLEB X - جميع الحقوق محفوظة</p>
+                <p>👨‍💻 المطور: @IDLEBX</p>
+            </div>
+            <script>
+                fetch('/api/stats').then(r=>r.json()).then(d=>{
+                    document.getElementById('users').innerText = d.users;
+                    document.getElementById('products').innerText = d.products;
+                    document.getElementById('points').innerText = d.totalPoints;
+                    document.getElementById('orders').innerText = d.totalOrders;
+                });
+            </script>
         </body>
         </html>
     `);
 });
 
-// ========== واجهة رفع الملفات للمدير ==========
+// ========== API للإحصائيات ==========
+app.get('/api/stats', (req, res) => {
+    const totalPoints = Array.from(users.values()).reduce((sum, u) => sum + u.points, 0);
+    const totalOrders = Array.from(users.values()).reduce((sum, u) => sum + u.orders.length, 0);
+    res.json({
+        users: users.size,
+        products: products.size,
+        totalPoints: totalPoints,
+        totalOrders: totalOrders
+    });
+});
+
+// ========== صفحة قائمة المنتجات ==========
+app.get('/admin/products', (req, res) => {
+    let html = `
+        <html>
+        <head><title>قائمة المنتجات</title><meta charset="UTF-8"><style>
+            body { background: linear-gradient(135deg,#0a0a0a,#1a1a2e); color:white; font-family:Arial; padding:20px; }
+            table { width:100%; border-collapse:collapse; background:rgba(255,255,255,0.1); border-radius:10px; }
+            th, td { padding:12px; text-align:right; border-bottom:1px solid rgba(255,255,255,0.2); }
+            th { background:#ff4444; }
+            .delete-btn { background:#ff0000; color:white; padding:5px 10px; border-radius:5px; text-decoration:none; }
+            .back-btn { background:#333; padding:10px 20px; border-radius:10px; text-decoration:none; color:white; display:inline-block; margin-top:20px; }
+        </style></head>
+        <body>
+            <h1>📋 قائمة المنتجات</h1>
+            <table>
+                <tr><th>ID</th><th>الاسم</th><th>السعر</th><th>النوع</th><th>الملف</th><th>حذف</th></tr>
+    `;
+    
+    for (const p of products.values()) {
+        html += `<tr>
+            <td>${p.id}</td>
+            <td>${p.name}</td>
+            <td>${p.price}</td>
+            <td>${p.type}</td>
+            <td>${p.filename || 'لا يوجد'}</td>
+            <td><a href="/admin/delete/${p.id}" class="delete-btn" onclick="return confirm('تأكيد الحذف؟')">🗑️</a></td>
+        </tr>`;
+    }
+    
+    html += `</table><br><a href="/" class="back-btn">🔙 رجوع</a></body></html>`;
+    res.send(html);
+});
+
+// ========== صفحة المستخدمين ==========
+app.get('/admin/users', (req, res) => {
+    let html = `
+        <html>
+        <head><title>قائمة المستخدمين</title><meta charset="UTF-8"><style>
+            body { background: linear-gradient(135deg,#0a0a0a,#1a1a2e); color:white; font-family:Arial; padding:20px; }
+            table { width:100%; border-collapse:collapse; background:rgba(255,255,255,0.1); border-radius:10px; }
+            th, td { padding:12px; text-align:right; border-bottom:1px solid rgba(255,255,255,0.2); }
+            th { background:#ff4444; }
+            .back-btn { background:#333; padding:10px 20px; border-radius:10px; text-decoration:none; color:white; display:inline-block; margin-top:20px; }
+        </style></head>
+        <body>
+            <h1>👥 قائمة المستخدمين</h1>
+            <table>
+                <tr><th>المعرف</th><th>اسم المستخدم</th><th>النقاط</th><th>الطلبات</th><th>تاريخ التسجيل</th></tr>
+    `;
+    
+    for (const [id, u] of users.entries()) {
+        html += `<tr>
+            <td>${id}</td>
+            <td>${u.username || 'لا يوجد'}</td>
+            <td>${u.points}</td>
+            <td>${u.orders.length}</td>
+            <td>${new Date(u.joinedAt).toLocaleDateString('ar')}</td>
+        </tr>`;
+    }
+    
+    html += `</table><br><a href="/" class="back-btn">🔙 رجوع</a></body></html>`;
+    res.send(html);
+});
+
+// ========== صفحة إرسال إشعار ==========
+app.get('/admin/broadcast', (req, res) => {
+    res.send(`
+        <html>
+        <head><title>إرسال إشعار</title><meta charset="UTF-8"><style>
+            body { background: linear-gradient(135deg,#0a0a0a,#1a1a2e); color:white; font-family:Arial; text-align:center; padding:50px; }
+            form { background:rgba(255,255,255,0.1); padding:30px; border-radius:20px; max-width:500px; margin:0 auto; }
+            textarea { width:100%; padding:15px; border-radius:10px; border:none; margin:10px 0; }
+            button { background:#ff4444; color:white; padding:15px 30px; border:none; border-radius:30px; cursor:pointer; }
+            .back-btn { background:#333; padding:10px 20px; border-radius:10px; text-decoration:none; color:white; display:inline-block; margin-top:20px; }
+        </style></head>
+        <body>
+            <h1>📢 إرسال إشعار للجميع</h1>
+            <form action="/admin/broadcast/send" method="POST">
+                <textarea name="message" rows="5" placeholder="اكتب الرسالة هنا..." required></textarea>
+                <button type="submit">📢 إرسال الإشعار</button>
+            </form>
+            <a href="/" class="back-btn">🔙 رجوع</a>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/admin/broadcast/send', express.urlencoded({ extended: true }), async (req, res) => {
+    const message = req.body.message;
+    let success = 0, fail = 0;
+    
+    for (const [userId, user] of users.entries()) {
+        try {
+            await sendMessage(userId, `📢 *إشعار من الإدارة*\n\n${message}`);
+            success++;
+        } catch (e) {
+            fail++;
+        }
+        await new Promise(r => setTimeout(r, 50));
+    }
+    
+    res.send(`<h3>✅ تم الإرسال</h3><p>✅ نجح: ${success} | ❌ فشل: ${fail}</p><a href="/">رجوع</a>`);
+});
+
+// ========== صفحة شحن النقاط ==========
+app.get('/admin/add-points', (req, res) => {
+    res.send(`
+        <html>
+        <head><title>شحن نقاط</title><meta charset="UTF-8"><style>
+            body { background: linear-gradient(135deg,#0a0a0a,#1a1a2e); color:white; font-family:Arial; text-align:center; padding:50px; }
+            form { background:rgba(255,255,255,0.1); padding:30px; border-radius:20px; max-width:400px; margin:0 auto; }
+            input { width:100%; padding:12px; margin:10px 0; border-radius:10px; border:none; }
+            button { background:#ff4444; color:white; padding:15px 30px; border:none; border-radius:30px; cursor:pointer; }
+            .back-btn { background:#333; padding:10px 20px; border-radius:10px; text-decoration:none; color:white; display:inline-block; margin-top:20px; }
+        </style></head>
+        <body>
+            <h1>💰 شحن نقاط لمستخدم</h1>
+            <form action="/admin/add-points/send" method="POST">
+                <input type="text" name="userId" placeholder="معرف المستخدم" required>
+                <input type="number" name="points" placeholder="عدد النقاط" required>
+                <button type="submit">💰 شحن</button>
+            </form>
+            <a href="/" class="back-btn">🔙 رجوع</a>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/admin/add-points/send', express.urlencoded({ extended: true }), async (req, res) => {
+    const { userId, points } = req.body;
+    
+    if (users.has(userId)) {
+        const user = users.get(userId);
+        user.points += parseInt(points);
+        users.set(userId, user);
+        await sendMessage(userId, `🎉 تم شحن رصيدك بـ ${points} نقطة!\n💰 رصيدك الحالي: ${user.points}`);
+        res.send(`<h3>✅ تم شحن ${points} نقطة للمستخدم ${userId}</h3><a href="/">رجوع</a>`);
+    } else {
+        res.send(`<h3>❌ المستخدم غير موجود</h3><a href="/admin/add-points">حاول مرة أخرى</a>`);
+    }
+});
+
+// ========== رفع الملفات ==========
 app.get('/admin/upload', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html>
         <head>
-            <title>رفع ملف للمنتج</title>
+            <title>رفع منتج جديد</title>
             <meta charset="UTF-8">
             <style>
-                body {
-                    background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
-                    color: white;
-                    font-family: Arial, sans-serif;
-                    text-align: center;
-                    padding: 50px;
-                }
-                form {
-                    background: rgba(255,255,255,0.1);
-                    padding: 30px;
-                    border-radius: 20px;
-                    max-width: 500px;
-                    margin: 0 auto;
-                }
-                input, select, textarea {
-                    width: 100%;
-                    padding: 12px;
-                    margin: 10px 0;
-                    border-radius: 10px;
-                    border: none;
-                    background: rgba(255,255,255,0.2);
-                    color: white;
-                }
-                input[type="file"] {
-                    background: rgba(255,255,255,0.1);
-                    padding: 10px;
-                }
-                button {
-                    background: linear-gradient(135deg, #ff4444, #cc0000);
-                    color: white;
-                    padding: 15px 30px;
-                    border: none;
-                    border-radius: 30px;
-                    cursor: pointer;
-                    font-size: 16px;
-                    margin-top: 20px;
-                }
-                .back {
-                    background: #333;
-                    display: inline-block;
-                    margin-top: 20px;
-                }
+                body { background: linear-gradient(135deg,#0a0a0a,#1a1a2e); color:white; font-family:Arial; text-align:center; padding:50px; }
+                form { background:rgba(255,255,255,0.1); padding:30px; border-radius:20px; max-width:500px; margin:0 auto; }
+                input, select, textarea { width:100%; padding:12px; margin:10px 0; border-radius:10px; border:none; background:rgba(255,255,255,0.2); color:white; }
+                button { background:linear-gradient(135deg,#ff4444,#cc0000); color:white; padding:15px 30px; border:none; border-radius:30px; cursor:pointer; margin-top:20px; }
+                .back-btn { background:#333; padding:10px 20px; border-radius:10px; text-decoration:none; color:white; display:inline-block; margin-top:20px; }
             </style>
         </head>
         <body>
-            <h1>📤 رفع ملف للمنتج</h1>
+            <h1>📤 رفع منتج جديد</h1>
             <form action="/admin/upload-file" method="POST" enctype="multipart/form-data">
                 <input type="text" name="productName" placeholder="اسم المنتج" required>
                 <input type="number" name="price" placeholder="السعر (نقاط)" required>
@@ -167,13 +311,12 @@ app.get('/admin/upload', (req, res) => {
                 <textarea name="description" placeholder="وصف المنتج" rows="3"></textarea>
                 <button type="submit">🚀 رفع المنتج</button>
             </form>
-            <a href="/" class="button back">🔙 رجوع</a>
+            <a href="/" class="back-btn">🔙 رجوع</a>
         </body>
         </html>
     `);
 });
 
-// ========== معالجة رفع الملف ==========
 app.post('/admin/upload-file', upload.single('file'), async (req, res) => {
     try {
         const { productName, price, type, description } = req.body;
@@ -184,8 +327,6 @@ app.post('/admin/upload-file', upload.single('file'), async (req, res) => {
         }
         
         const newId = nextProductId++;
-        const fileUrl = `${BASE_URL}/files/${file.filename}`;
-        
         products.set(newId, {
             id: newId,
             name: productName,
@@ -193,42 +334,37 @@ app.post('/admin/upload-file', upload.single('file'), async (req, res) => {
             type: type,
             filename: file.filename,
             filepath: file.path,
-            fileUrl: fileUrl,
+            fileSize: file.size,
             description: description || '',
             createdAt: Date.now()
         });
         
         res.send(`
             <h3>✅ تم إضافة المنتج بنجاح!</h3>
-            <p>📦 اسم المنتج: ${productName}</p>
-            <p>💰 السعر: ${price} نقطة</p>
-            <p>📂 النوع: ${type}</p>
-            <p>📁 الملف: ${file.filename}</p>
-            <a href="/admin/upload">➕ إضافة منتج آخر</a><br>
-            <a href="/">🏠 العودة للرئيسية</a>
+            <p>📦 ${productName}</p>
+            <p>💰 ${price} نقطة</p>
+            <p>📁 ${file.filename}</p>
+            <a href="/admin/upload">➕ إضافة آخر</a><br>
+            <a href="/">🏠 الرئيسية</a>
         `);
         
     } catch (error) {
-        console.error(error);
         res.send('<h3>❌ حدث خطأ</h3><a href="/admin/upload">حاول مرة أخرى</a>');
     }
 });
 
-// ========== حذف ملف ==========
 app.get('/admin/delete/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const product = products.get(id);
     
-    if (product && product.filepath) {
+    if (product && product.filepath && fs.existsSync(product.filepath)) {
         try {
             fs.unlinkSync(product.filepath);
-            products.delete(id);
-            res.send(`<h3>✅ تم حذف المنتج والملف بنجاح</h3><a href="/admin/upload">رجوع</a>`);
-        } catch (err) {
-            res.send(`<h3>❌ خطأ في الحذف</h3><a href="/admin/upload">رجوع</a>`);
-        }
+        } catch(e) {}
+        products.delete(id);
+        res.send(`<h3>✅ تم حذف المنتج</h3><a href="/admin/products">رجوع</a>`);
     } else {
-        res.send(`<h3>❌ المنتج غير موجود</h3><a href="/admin/upload">رجوع</a>`);
+        res.send(`<h3>❌ المنتج غير موجود</h3><a href="/admin/products">رجوع</a>`);
     }
 });
 
@@ -236,14 +372,8 @@ app.get('/admin/delete/:id', (req, res) => {
 app.post('/webhook', async (req, res) => {
     try {
         const update = req.body;
-        
-        if (update.message) {
-            await handleMessage(update.message);
-        }
-        else if (update.callback_query) {
-            await handleCallback(update.callback_query);
-        }
-        
+        if (update.message) await handleMessage(update.message);
+        else if (update.callback_query) await handleCallback(update.callback_query);
         res.send('OK');
     } catch (error) {
         console.error('Error:', error);
@@ -259,7 +389,6 @@ async function handleMessage(message) {
     const username = message.from.username || 'مستخدم';
     const firstName = message.from.first_name || 'صديق';
 
-    // تسجيل المستخدم الجديد
     if (!users.has(userId)) {
         users.set(userId, {
             points: 100,
@@ -268,12 +397,8 @@ async function handleMessage(message) {
             orders: [],
             joinedAt: Date.now()
         });
-        
         await sendMessage(chatId, 
-            `🎉 *مرحباً بك في IDLEB X!* 🎉\n\n` +
-            `✨ تم إهدائك *100 نقطة* كهدية ترحيب!\n` +
-            `💰 رصيدك الحالي: 100 نقطة\n\n` +
-            `📌 استخدم الأزرار أدناه لبدء التجربة.`,
+            `🎉 *مرحباً بك في IDLEB X!* 🎉\n\n✨ تم إهدائك *100 نقطة* كهدية ترحيب!\n💰 رصيدك: 100 نقطة`,
             getMainKeyboard()
         );
         return;
@@ -283,14 +408,12 @@ async function handleMessage(message) {
     user.lastActivity = Date.now();
     users.set(userId, user);
 
-    // معالجة الأوامر
     if (text === '/start') {
         await sendMessage(chatId,
-            `✨ *مرحباً بعودتك يا ${firstName}!* ✨\n\n` +
+            `✨ *مرحباً بعودتك يا ${firstName}!*\n\n` +
             `💰 *رصيدك:* ${user.points} نقطة\n` +
             `📦 *طلباتك:* ${user.orders.length}\n` +
-            `⭐ *عضو منذ:* ${new Date(user.joinedAt).toLocaleDateString('ar')}\n\n` +
-            `👇 اختر من القائمة أدناه`,
+            `👇 اختر من القائمة`,
             getMainKeyboard()
         );
     }
@@ -298,138 +421,45 @@ async function handleMessage(message) {
         await showProducts(chatId);
     }
     else if (text === '📦 طلباتي' || text === '/orders') {
-        await showUserOrders(chatId, userId, user);
+        await showUserOrders(chatId, user);
     }
     else if (text === '💰 رصيدي' || text === '/points') {
-        await sendMessage(chatId,
-            `💰 *رصيدك الحالي:* ${user.points} نقطة\n\n` +
-            `💡 *كيف تكسب نقاط؟*\n` +
-            `• استخدام خدمات الرشق (-${services[0].points} نقطة)\n` +
-            `• شراء منتجات من المتجر\n` +
-            `• إحالة الأصدقاء (قريباً)`
-        );
+        await sendMessage(chatId, `💰 *رصيدك:* ${user.points} نقطة`);
     }
     else if (text === '🎁 شحن الرصيد' || text === '/recharge') {
         await sendMessage(chatId,
-            `🎁 *طرق شحن الرصيد*\n\n` +
-            `1️⃣ *الإحالات*\n` +
-            `   كل صديق يدخل عن طريقك تربح 50 نقطة\n` +
-            `   رابطك: <code>https://t.me/${BOT_TOKEN.split(':')[0]}?start=ref_${userId}</code>\n\n` +
-            `2️⃣ *تواصل مع المدير*\n` +
-            `   للشحن المباشر: ${DEVELOPER}`
+            `🎁 *طرق الشحن*\n\n` +
+            `• تواصل مع المدير: ${DEVELOPER}\n` +
+            `• رابط إحالتك: <code>https://t.me/${BOT_TOKEN.split(':')[0]}?start=ref_${userId}</code>`
         );
     }
-    else if (text === '📢 القنوات' || text === '/channels') {
-        await sendMessage(chatId,
-            `📢 *قنوات IDLEB X*\n\n` +
-            `✅ *قناة الخدمات:* @IDLEBX\n` +
-            `✅ *قناة العروض:* @IDLEBX2\n\n` +
-            `💡 اشترك ليصلك كل جديد!`
-        );
+    else if (text === '📢 القنوات') {
+        await sendMessage(chatId, `📢 @IDLEBX | @IDLEBX2`);
     }
-    else if (text === '🆘 مساعدة' || text === '/help') {
-        await sendMessage(chatId,
-            `🆘 *مركز المساعدة*\n\n` +
-            `📌 *الأوامر المتاحة:*\n` +
-            `🛒 /shop - المتجر\n` +
-            `📦 /orders - طلباتي\n` +
-            `💰 /points - رصيدي\n` +
-            `🎁 /recharge - شحن الرصيد\n\n` +
-            `👨‍💻 *الدعم الفني:* ${DEVELOPER}`
-        );
+    else if (text === '🆘 مساعدة') {
+        await sendMessage(chatId, `🆘 للدعم: ${DEVELOPER}`);
     }
-    else if (text === '🔙 رجوع' || text === '🏠 الرئيسية') {
+    else if (text === '🔙 رجوع') {
         await sendMessage(chatId, `🏠 *القائمة الرئيسية*`, getMainKeyboard());
     }
     else if (text === '/admin' && ADMIN_IDS.includes(userId)) {
-        await sendMessage(chatId,
-            `🔐 *لوحة تحكم المدير*\n\n` +
-            `📊 *إحصائيات:*\n` +
-            `👥 المستخدمين: ${users.size}\n` +
-            `📦 المنتجات: ${products.size}\n\n` +
-            `🔗 *روابط الإدارة:*\n` +
-            `📤 رفع منتج: ${BASE_URL}/admin/upload\n` +
-            `🗑️ حذف منتج: ${BASE_URL}/admin/delete/رقم_المنتج`
-        );
+        await sendMessage(chatId, `🔐 *لوحة المدير*\n\n📊 إحصائيات:\n👥 ${users.size} مستخدم\n📦 ${products.size} منتج\n\n🔗 ${BASE_URL}/admin/upload`);
     }
     else if (text.startsWith('/addpoints') && ADMIN_IDS.includes(userId)) {
         const parts = text.split(' ');
-        if (parts.length === 3) {
-            const targetId = parts[1];
-            const points = parseInt(parts[2]);
-            if (users.has(targetId)) {
-                const targetUser = users.get(targetId);
-                targetUser.points += points;
-                users.set(targetId, targetUser);
-                await sendMessage(chatId, `✅ تم إضافة ${points} نقطة للمستخدم ${targetId}`);
-                await sendMessage(targetId, `🎉 تم شحن رصيدك بـ ${points} نقطة!\n💰 رصيدك الحالي: ${targetUser.points}`);
-            }
+        if (parts.length === 3 && users.has(parts[1])) {
+            const target = users.get(parts[1]);
+            target.points += parseInt(parts[2]);
+            users.set(parts[1], target);
+            await sendMessage(chatId, `✅ تم شحن ${parts[2]} نقطة`);
+            await sendMessage(parts[1], `🎉 تم شحن رصيدك بـ ${parts[2]} نقطة!`);
         }
     }
-    else if (text.includes('instagram.com') || text.includes('tiktok.com') || text.includes('http')) {
+    else if (text.includes('instagram.com') || text.includes('tiktok.com')) {
         await handleRashq(chatId, userId, text, user);
     }
     else {
-        await sendMessage(chatId,
-            `❓ *عذراً، الأمر غير معروف*\n\n📋 أرسل /start لعرض القائمة`,
-            getMainKeyboard()
-        );
-    }
-}
-
-// ========== معالجة الرشق ==========
-async function handleRashq(chatId, userId, link, user) {
-    let selectedService = null;
-    for (const service of services) {
-        if ((link.includes('instagram') && service.name.includes('انستقرام')) ||
-            (link.includes('tiktok') && service.name.includes('تيك توك'))) {
-            selectedService = service;
-            break;
-        }
-    }
-    
-    if (!selectedService) {
-        await sendMessage(chatId, `❓ لم نتمكن من تحديد الخدمة.\n📋 استخدم الأزرار لاختيار الخدمة أولاً.`);
-        return;
-    }
-    
-    if (user.points < selectedService.points) {
-        await sendMessage(chatId,
-            `❌ *رصيدك غير كافٍ!*\n\n` +
-            `💰 رصيدك: ${user.points} نقطة\n` +
-            `💰 سعر الخدمة: ${selectedService.points} نقطة\n\n` +
-            `💡 الفرق: ${selectedService.points - user.points} نقطة`
-        );
-        return;
-    }
-    
-    user.points -= selectedService.points;
-    users.set(userId, user);
-    
-    let targetUrl;
-    if (selectedService.type === 'user') {
-        targetUrl = `${selectedService.endpoint}?username=${encodeURIComponent(link)}`;
-    } else {
-        targetUrl = `${selectedService.endpoint}?url=${encodeURIComponent(link)}`;
-    }
-    if (selectedService.quantity) {
-        targetUrl += `&quantity=${selectedService.quantity}`;
-    }
-    
-    try {
-        await fetch(targetUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } });
-        
-        await sendMessage(chatId,
-            `✅ *تم تنفيذ الخدمة بنجاح!*\n\n` +
-            `${selectedService.name}\n` +
-            `💰 تم الخصم: -${selectedService.points} نقطة\n` +
-            `💰 رصيدك المتبقي: ${user.points} نقطة\n\n` +
-            `⏱️ سيتم التنفيذ خلال 5-30 دقيقة`
-        );
-    } catch (error) {
-        user.points += selectedService.points;
-        users.set(userId, user);
-        await sendMessage(chatId, `❌ حدث خطأ، تم استرداد نقاطك.`);
+        await sendMessage(chatId, `❓ أمر غير معروف\n📋 /start`, getMainKeyboard());
     }
 }
 
@@ -449,10 +479,8 @@ async function showProducts(chatId) {
             ]]
         };
         
-        let message = `🛍️ *${product.name}*\n\n`;
-        message += `💰 *السعر:* ${product.price} نقطة\n`;
-        message += `📂 *النوع:* ${product.type}\n`;
-        if (product.description) message += `📝 *الوصف:* ${product.description}\n`;
+        let message = `🛍️ *${product.name}*\n💰 ${product.price} نقطة\n📂 ${product.type}`;
+        if (product.description) message += `\n📝 ${product.description}`;
         
         await sendMessage(chatId, message, null, keyboard);
     }
@@ -469,12 +497,11 @@ async function handlePurchase(chatId, userId, productId) {
     }
     
     if (user.points < product.price) {
-        await sendMessage(chatId,
-            `❌ *رصيدك غير كافٍ!*\n\n💰 رصيدك: ${user.points} نقطة\n💰 سعر المنتج: ${product.price} نقطة`
-        );
+        await sendMessage(chatId, `❌ رصيدك غير كافٍ!\n💰 رصيدك: ${user.points}\n💰 سعر المنتج: ${product.price}`);
         return;
     }
     
+    // خصم النقاط
     user.points -= product.price;
     user.orders.push({
         id: Date.now(),
@@ -484,43 +511,91 @@ async function handlePurchase(chatId, userId, productId) {
     });
     users.set(userId, user);
     
-    // إرسال الملف مباشرة (مو رابط)
+    // إرسال الملف مباشرة
     if (product.filepath && fs.existsSync(product.filepath)) {
-        // إرسال الملف كـ Document
-        await sendDocument(chatId, product.filepath, product.name);
-        
-        await sendMessage(chatId,
-            `✅ *تم شراء المنتج بنجاح!*\n\n` +
-            `📦 *المنتج:* ${product.name}\n` +
-            `💰 *تم الخصم:* -${product.price} نقطة\n` +
-            `💰 *رصيدك المتبقي:* ${user.points} نقطة\n\n` +
-            `📎 *تم إرسال الملف أعلاه*`
-        );
+        const sent = await sendDocument(chatId, product.filepath, product.name);
+        if (sent) {
+            await sendMessage(chatId,
+                `✅ *تم شراء المنتج بنجاح!*\n\n` +
+                `📦 ${product.name}\n` +
+                `💰 تم الخصم: -${product.price}\n` +
+                `💰 رصيدك المتبقي: ${user.points}\n\n` +
+                `📎 *تم إرسال الملف أعلاه*`
+            );
+        } else {
+            await sendMessage(chatId,
+                `✅ *تم شراء المنتج بنجاح!*\n\n` +
+                `📦 ${product.name}\n` +
+                `💰 تم الخصم: -${product.price}\n` +
+                `💰 رصيدك المتبقي: ${user.points}\n\n` +
+                `⚠️ حدث خطأ في إرسال الملف، تواصل مع المدير: ${DEVELOPER}`
+            );
+        }
     } else {
         await sendMessage(chatId,
             `✅ *تم شراء المنتج بنجاح!*\n\n` +
-            `📦 *المنتج:* ${product.name}\n` +
-            `💰 *تم الخصم:* -${product.price} نقطة\n` +
-            `💰 *رصيدك المتبقي:* ${user.points} نقطة\n\n` +
-            `⚠️ الملف غير متوفر حالياً، تواصل مع المدير.`
+            `📦 ${product.name}\n` +
+            `💰 تم الخصم: -${product.price}\n` +
+            `💰 رصيدك المتبقي: ${user.points}\n\n` +
+            `⚠️ الملف غير متوفر، تواصل مع المدير: ${DEVELOPER}`
         );
     }
 }
 
-async function showUserOrders(chatId, userId, user) {
+async function showUserOrders(chatId, user) {
     if (user.orders.length === 0) {
-        await sendMessage(chatId, `📦 ليس لديك أي طلبات سابقة.`);
+        await sendMessage(chatId, `📦 ليس لديك طلبات سابقة.`);
         return;
     }
     
-    let message = `📦 *طلباتي السابقة*\n━━━━━━━━━━━━━━━━━\n\n`;
+    let message = `📦 *طلباتي*\n━━━━━━━━━━━\n`;
     for (const order of user.orders.slice(-10).reverse()) {
-        message += `🆔 #${order.id}\n📦 ${order.productName}\n📅 ${new Date(order.date).toLocaleDateString('ar')}\n━━━━━━━━━━━━━━━━━\n`;
+        message += `📦 ${order.productName}\n📅 ${new Date(order.date).toLocaleDateString('ar')}\n━━━━━━━━━━━\n`;
     }
     await sendMessage(chatId, message);
 }
 
-// ========== معالجة الأزرار ==========
+async function handleRashq(chatId, userId, link, user) {
+    let selectedService = null;
+    for (const service of services) {
+        if ((link.includes('instagram') && service.name.includes('انستقرام')) ||
+            (link.includes('tiktok') && service.name.includes('تيك توك'))) {
+            selectedService = service;
+            break;
+        }
+    }
+    
+    if (!selectedService) {
+        await sendMessage(chatId, `❓ لم نتمكن من تحديد الخدمة.`);
+        return;
+    }
+    
+    if (user.points < selectedService.points) {
+        await sendMessage(chatId, `❌ رصيدك غير كافٍ!\n💰 تحتاج ${selectedService.points} نقطة`);
+        return;
+    }
+    
+    user.points -= selectedService.points;
+    users.set(userId, user);
+    
+    let targetUrl;
+    if (selectedService.type === 'user') {
+        targetUrl = `${selectedService.endpoint}?username=${encodeURIComponent(link)}`;
+    } else {
+        targetUrl = `${selectedService.endpoint}?url=${encodeURIComponent(link)}`;
+    }
+    if (selectedService.quantity) targetUrl += `&quantity=${selectedService.quantity}`;
+    
+    try {
+        await fetch(targetUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } });
+        await sendMessage(chatId, `✅ *تم تنفيذ ${selectedService.name}!*\n💰 تم الخصم: -${selectedService.points}\n💰 رصيدك: ${user.points}`);
+    } catch (error) {
+        user.points += selectedService.points;
+        users.set(userId, user);
+        await sendMessage(chatId, `❌ حدث خطأ، تم استرداد نقاطك.`);
+    }
+}
+
 async function handleCallback(callback) {
     const chatId = callback.message.chat.id;
     const userId = callback.from.id.toString();
@@ -553,23 +628,14 @@ function getMainKeyboard() {
     };
 }
 
-async function sendMessage(chatId, text, replyKeyboard = null, inlineKeyboard = null) {
+async function sendMessage(chatId, text, replyKeyboard = null) {
     const payload = {
         chat_id: chatId,
         text: text,
         parse_mode: 'Markdown',
         disable_web_page_preview: true
     };
-    
-    if (replyKeyboard?.reply_markup) {
-        payload.reply_markup = replyKeyboard.reply_markup;
-    } else if (replyKeyboard) {
-        payload.reply_markup = JSON.stringify(replyKeyboard);
-    }
-    
-    if (inlineKeyboard) {
-        payload.reply_markup = JSON.stringify(inlineKeyboard);
-    }
+    if (replyKeyboard) payload.reply_markup = replyKeyboard.reply_markup;
     
     try {
         await fetch(`${TELEGRAM_API}/sendMessage`, {
@@ -577,32 +643,32 @@ async function sendMessage(chatId, text, replyKeyboard = null, inlineKeyboard = 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-    } catch (error) {
-        console.error('Error:', error);
-    }
+    } catch (e) {}
 }
 
 async function sendDocument(chatId, filePath, fileName) {
-    const formData = new FormData();
-    const fileBuffer = fs.readFileSync(filePath);
-    const blob = new Blob([fileBuffer]);
-    formData.append('chat_id', chatId);
-    formData.append('document', blob, fileName);
-    
     try {
-        await fetch(`${TELEGRAM_API}/sendDocument`, {
+        const form = new FormData();
+        form.append('chat_id', chatId);
+        form.append('document', fs.createReadStream(filePath));
+        
+        const response = await fetch(`${TELEGRAM_API}/sendDocument`, {
             method: 'POST',
-            body: formData
+            body: form,
+            headers: form.getHeaders()
         });
+        
+        const result = await response.json();
+        return result.ok === true;
     } catch (error) {
-        console.error('Error sending file:', error);
+        console.error('Error sending document:', error);
+        return false;
     }
 }
 
-// ========== تشغيل السيرفر ==========
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 IDLEB X Bot is running on port ${PORT}`);
-    console.log(`📁 Files directory: ${filesDir}`);
+    console.log(`🚀 IDLEB X Bot running on port ${PORT}`);
+    console.log(`📁 Files: ${filesDir}`);
     console.log(`📦 Products: ${products.size}`);
 });
