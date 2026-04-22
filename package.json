@@ -1,13 +1,14 @@
 {
   "name": "idlebx-store-bot",
   "version": "3.0.0",
-  "description": "IDLEB X - بوت متجر ورشق تفاعل احترافي",
+  "description": "IDLEB X - بوت متجر مع رفع ملفات حقيقية",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "multer": "^1.4.5-lts.1"
   }
 }
