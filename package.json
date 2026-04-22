@@ -1,0 +1,13 @@
+{
+  "name": "idlebx-store-bot",
+  "version": "3.0.0",
+  "description": "IDLEB X - بوت متجر ورشق تفاعل احترافي",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0"
+  }
+}
